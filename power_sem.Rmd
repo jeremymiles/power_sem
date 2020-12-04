@@ -39,7 +39,9 @@ power.t.test(d = 0.2, n = 100)
 
 ```
 
-### Power from lavaan.
+### Power from lavaan for t-test as regression.
+
+A t-test can be specified as a regression, and in our first example we exploit this. 
 
 Now we estimate power using lavaan.  This can be done in two ways: using a single group with a dichotous predictor, or using multiple groups. 
 
@@ -52,14 +54,186 @@ d <- data.frame(x = rep(c(0, 1), 100), y = rnorm(200))
 ```
 Now we set up our model in lavaan.
 
-We need to set the variance of y (which we'll set to 1), the variance of x (which is determined by the values of x - the variance is calculated using $p * (1 - p)$  )
+We need to set the variance of x (which is determined by the values of x - the variance is calculated using $p(1 - p)$  because our samples are equal, this is $0.5(1 - 0.5) = 0.25)$.
+
+We also need to set the residual variance of y, such that the variance of y equals 1. This can be a bit of a pain to do, and sometimes a bit of trial and error is best (or you can calculate it, if you must). 
+
+Look at the summary of the model. It should have no free parameters if we got it right. 
+
+Finally we look at the implied covariance matrix. This is is our population data. 
 
 ```{r t3}
 t_m1 <- "
-y ~ 0.2x
-y ~~ 1
-"
+  y ~ 0.2 * x
+  y ~~ (1 - 0.01) * y
+  x ~~ 0.25 * x
+  "
+fit1 <- lavaan::sem(t_m1, d)
+summary(fit1)
+impcov1 <- fitted(fit1)
+impcov1
 
 ```
+Now we have the population data, we can fit the null model to it. We free all of the parameters, except the single one that we are interested in. Then we fit that model. And we'll have a look at it. 
+
+```{r t4}
+t_m2 <- "
+  y ~ 0 * x
+  y ~~ y
+  x ~~  x
+  "
+fit2 <- lavaan::sem(t_m2, sample.cov = impcov1, sample.nobs = 200)
+summary(fit2)
+
+```
+All we are really interested in is the chi-square statistic, so we can extract that.
+
+```{r t5}
+chisq <- fitMeasures(fit2)[["chisq"]]
+chisq
+```
+
+This is what we wanted! The non-centrality parameter. This is our estimate of the population chi-square, given the sample size we had. We are sampling from a population with that value of chi-square. How likely is it we'll get a value that is statistically significant. 
+
+We need to know the critical value of chi-square with 1 df.  We use the qchisq() function to get this. Then we use the pchisq() function to find the probability of obtaining a result at least this high, given that we have a particular value in the population.
+
+```{r t6}
+crit_chi <- qchisq(p = 0.95, df = 1)
+1 - pchisq(q = crit_chi, df = 1, ncp = chisq)
+
+```
+And there we have the power. Which is the same power that we had before. 
+
+This was kind of complex, but the basic idea can be extended to any model that you can represent in an SEM, and that includes anova, manova, repeated measures manova, mancova, 2 way repeated measures anova, etc.  We can also, as we'll see, relax some assumptions. 
+
+A nice thing about this approach is that the non-centrality parameter is a multiple of the sample size. If you double the sample size, you double the non-centrality parameter. If I want to 
+
+### Multiple Groups Model for t-test
+
+The second approach we can take is to use a multiple groups model. In this approachwe fit the data to two groups. The data setup is easier, as we don't need to generate the data, we know what it looks like.
+
+For the covariances, we know (for now) that the variance in each group is equal to 1.00. We make a list of covariance matrices. The means are equal to 0 and 0.2, to create d = 0.2. The sample sizes are both 100.
+
+We extract the chi-square, and do the same calculation using pchisq() as before and we get the same power. 
+
+```{r t7}
+
+mat <- matrix(1)
+rownames(mat) <- "y"
+colnames(mat) <- "y"
+covs <- list(mat, mat)
+means <- list(0, 0.2)
+ns <- list(100, 100)
+
+model_mg_1 <- "
+  y ~~ y
+  y ~  c(a, a) * 1  "
+
+fit_mg_1 <- lavaan::sem(model_mg_1, sample.cov = covs, sample.mean = means,
+                        sample.nobs = ns)
+summary(fit_mg_1)
+
+chisq <- fitMeasures(fit_mg_1)[["chisq"]]
+
+1 - pchisq(q = crit_chi, df = 1, ncp = chisq)
 
 
+```
+### Heteroskedasticity
+
+OK, we've now got two ways to estimate power. Why do we care? 
+
+We care because we now have a whole bunch of flexibility. 
+
+What if we want to violate homogeneity of variance? The first problem with this is that we can't as easily estimate d, because we have different variances. However, homogeneity of variance only really is a problem when the sample sizes are unequal in the two groups. The second problem is that we have can't tell the power.t.test() function in R that we have different variances (or different sample sizes). We can run a simulation, or we can use the SEM approach. 
+
+Simulation first. We'll have two groups, n1 = 50, n2 = 950. These will have different variances. sd1 = 0.5, sd2 = 2, and we'll make the difference two points.
+
+Simulation first:
+```{r t8}
+    n1 = 50
+    n2 = 950
+    sd1 = 0.5
+    sd2 = 2
+    diff = 0.2
+system.time({
+  power <- lapply(1:1e4, function(i) {
+    d <- data.frame(x = c(rep(0, n1), rep(1, n2)),
+                    y = c(rnorm(n1) * sd1 + 0,
+                          rnorm(n2) * sd2 + diff))
+    sig <- t.test(d$y ~ d$x)$p.value < 0.05
+    return(sig)
+  }) %>% unlist() %>% mean()
+}) 
+power
+
+```
+We can also estimate the power using the SEM approach.
+
+```{r t9}
+n1 = 50
+n2 = 950
+sd1 = 0.5
+sd2 = 2
+diff = 0.2
+mat1 <- matrix(sd1^2)
+mat2 <- matrix(sd2^2)
+rownames(mat1) <- "y"
+colnames(mat1) <- "y"
+rownames(mat2) <- "y"
+colnames(mat2) <- "y"
+covs <- list(mat1, mat2)
+means <- list(0, diff)
+ns <- list(n1, n2)
+
+model_mg_2 <- "
+  y ~~ y
+  y ~  c(a, a) * 1  "
+
+fit_mg_2 <- lavaan::sem(model_mg_2, sample.cov = covs, sample.mean = means,
+                        sample.nobs = ns)
+summary(fit_mg_2)
+
+chisq <- fitMeasures(fit_mg_2)[["chisq"]]
+
+1 - pchisq(q = crit_chi, df = 1, ncp = chisq)
+```
+
+The two approaches give me the same power. The simulation approach takes 48 seconds on my computer. The SEM approach takes less than one second. This doesn't sound like much, but if you want to do a lot of power analysis, because you want to tweak the parameters, it adds up.
+
+### A Short Cut / Rule of Thumb
+
+The slightly annoying thing about all this is that we can't ask for the sample size, given the power - which is the usual approach. We can only ask for the power, given the sample size. We can spend a while making guesses and changing the numbers, but there's an easy rule of thum. 
+
+If the chi-square for the non-centrality parameter is equal to the critical value of chi-square at p = 0.005, you'll have pretty close to 80% power.
+
+Let's check on that. First, we need to know the chi-square critical value for p = 0.01. (You might know that already, but I'm going to work it out, because I don't.)
+
+```{r t11}
+crit01 <- qchisq(0.995, 1)
+crit01
+```
+
+Now we know that value, and we also know that the (non-central) chisquare value is function fo the sample size, we can divide the chi-square we want (`r crit01`) by the chi-square we have `r chisq`, and multiply the sample sizes by that value.
+
+```{r t10}
+
+sample_multiplier <- crit01 / chisq
+
+n1a = 50 * sample_multiplier
+n2a = 950 * sample_multiplier
+ns <- list(n1a, n2a)
+
+model_mg_3 <- "
+  y ~~ y
+  y ~  c(a, a) * 1  "
+
+fit_mg_3 <- lavaan::sem(model_mg_3, sample.cov = covs, sample.mean = means,
+                        sample.nobs = ns)
+summary(fit_mg_3)
+
+new_chisq <- fitMeasures(fit_mg_3)[["chisq"]]
+
+1 - pchisq(q = crit_chi, df = 1, ncp = new_chisq)
+
+```
