@@ -375,3 +375,35 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
 
 ```
+OK, let's see what sample size we need, and then test it.
+
+```{r t15}
+
+
+# Find the desired ncp
+desired_ncp <- qchisq(p = 0.99, df = 1)
+## sample size multiplier
+n_multiplier <- desired_ncp / chisq
+n_multiplier
+
+ns <- lapply(ns, function(n) return(n * n_multiplier))
+
+model_mg_2 <- "
+  y ~~ y
+  y ~  c(a, a) * 1 "
+
+fit_mg_2 <- lavaan::sem(
+  model_mg_2, 
+  sample.cov = covs, 
+  sample.mean = means,
+  sample.nobs = ns)
+
+ncp <- fitMeasures(fit_mg_2)[["chisq"]]
+## Critical Chi-Square
+crit_chi <- qchisq(p = 0.95, df = 1)
+## Power
+1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
+
+
+
+```
