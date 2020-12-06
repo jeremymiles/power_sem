@@ -6,7 +6,7 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
-library(lavaan)
+library(lavaan) 
 ```
 
 # Power Analysis in SEM
@@ -14,21 +14,30 @@ library(lavaan)
 Author: jeremy.miles@gmail.com
 Date: 2020-12-05
 
-This analysis updates the paper [A framework for power analysis using a structural equation modelling procedure](https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-3-27)
+This analysis updates the paper [A framework for power analysis using a 
+structural equation modelling procedure](https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-3-27)
+(Open access paper.)
 
-The paper describes how to do power analysis for multivariate analysis using SEM.
+The paper describes how to do power analysis for multivariate analysis using
+SEM.
+The examples in the paper are written using Mx. This file updates the programs
+and gives some examples using R and the lavaan package. 
 
-The examples in the paper are written using Mx. This file updates the programs and gives some examples using R and the lavaan package. 
-
-Many analyses are special cases of SEMs, and SEMs are pretty straightforward to calculate power for, using the [Satorra-Saris method](https://link.springer.com/article/10.1007/BF02294150).
+The approach relies on the fact that many analyses are special cases of SEMs,
+and SEMs are pretty straightforward to calculate power for, using the
+[Satorra-Saris method](https://link.springer.com/article/10.1007/BF02294150).
 
 Note that I'm going to assume that you know how to use lavaan (and R) for this tutorial and won't give long explanations of models.
 
 # Examples
 
-The basic approach is always the same. Set up the data which matches the population that we are interested in, by making a model in lavaan that is saturated. Then get the implied means and covariance matrix (or matrices). Then fit the data to the model with the parameter of interest constrained to zero.
+The basic approach is always the same. Set up the data which matches the
+population that we are interested in, by making a model in lavaan that is
+saturated. Then get the implied means and covariance matrix (or matrices). Then
+fit the data to the model with the parameter of interest constrained to zero.
 
-The chi-square from this model with the parameter constrained to zero is the non-centrality parameter. 
+The chi-square from this model with the parameter constrained to zero is the
+non-centrality parameter. 
 
 
 ## t test
@@ -276,11 +285,11 @@ But how do I know how large I need my non-centrality parameter (ncp) to be? Well
 
 So, first we find out what the ncp needs to be, then we find find how many times larger (or smaller) this value is than our NCP, then we increase our sample size by this value.
 
-```{r t13}
+```{r t14}
 # Find the desired ncp
 desired_ncp <- qchisq(p = 0.995, df = 1)
 ## sample size multiplier
-n_multiplier <- desired_ncp / chisq
+n_multiplier <- desired_ncp / ncp
 n_multiplier
 # we had ns already set up, so we can multiply this.
 # But it needs to be an integer, so we round it.
@@ -308,7 +317,7 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 
 Finally, we'll see if that's correct.
 
-```{r t14}
+```{r t15}
 
 power.t.test(power = 0.8, d = 0.2)
 
@@ -322,7 +331,7 @@ It was. But we can do lots of clever things now. What happens if we think we mig
 For example, if we think the the variances will be (1, 4), the sample sizes (100, 400) and the difference 0.2, we could run a simulation.
 
 
-```{r t14}
+```{r t16}
 
 n0 = 100
 n1 = 400
@@ -350,7 +359,7 @@ res
 Hmm... that's not a lot of power. And it takes 42 seconds to run on my computer. 
 
 
-```{r t14}
+```{r t17}
 mat0 <- matrix(v0^2)
 mat1 <- matrix(v1^2)
 colnames(mat0) <- colnames(mat0) <- "y"
@@ -375,18 +384,20 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
 
 ```
-OK, let's see what sample size we need, and then test it.
+OK, let's see what sample size we need, and then test it to see if it's correct.
 
-```{r t15}
-
+```{r t18}
 
 # Find the desired ncp
-desired_ncp <- qchisq(p = 0.99, df = 1)
+desired_ncp <- qchisq(p = 0.995, df = 1)
 ## sample size multiplier
-n_multiplier <- desired_ncp / chisq
+n_multiplier <- desired_ncp / ncp
 n_multiplier
 
 ns <- lapply(ns, function(n) return(n * n_multiplier))
+
+# new ns
+ns
 
 model_mg_2 <- "
   y ~~ y
@@ -407,3 +418,7 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 
 
 ```
+
+If you've got a simple power problem, it's quickest to use the base R functions. If you've got a slightly more complex problem, it's quickest to run a simulation.
+
+If you want to test 20 different sample sizes, with 20 different ratios of variances, that's going to take almost 5 hours of computer time to run the simulations - it's going to be quicker to wrap the above code into a loop, and run that. 
