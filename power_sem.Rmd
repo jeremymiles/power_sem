@@ -27,7 +27,8 @@ The approach relies on the fact that many analyses are special cases of SEMs,
 and SEMs are pretty straightforward to calculate power for, using the
 [Satorra-Saris method](https://link.springer.com/article/10.1007/BF02294150).
 
-Note that I'm going to assume that you know how to use lavaan (and R) for this tutorial and won't give long explanations of models.
+Note that I'm going to assume that you know how to use lavaan (and R) for this
+tutorial and won't give long explanations of models (or of power).
 
 # Examples
 
@@ -45,11 +46,14 @@ We'll start with some simple examples, like a t-test.
 
 ### t test in SEM
 
-There are a couple of ways to do a t-test in SEM. We can use a regression approach, or a multiple groups approach. 
+There are a couple of ways to do a t-test in SEM. We can use a regression
+approach, or a multiple groups approach. 
 
 We'll show these by generating some data, and doing a t-test.
 
-First we'll make up some data. We'll generate two groups, with 100 in each group; group 0 will have a population mean of 0, and group 1 will have a population mean of 0.2. Both groups will have sd = 1.
+First we'll make up some data. We'll generate two groups, with 100 in each
+group; group 0 will have a population mean of 0, and group 1 will have a
+population mean of 0.2. Both groups will have sd = 1.
 
 ```{r t1}
 
@@ -68,7 +72,8 @@ t.test(y ~ x, data = d1, var.equal = TRUE)
 
 ```
 
-Now we'll do it with SEM, using both the regression method and the multiple groups method.
+Now we'll do it with SEM, using both the regression method and the multiple
+groups method.
 
 First, we'll use the regression model:
 
@@ -98,7 +103,10 @@ summary(sem_mg_fit, ci = TRUE)
 
 Cool! Same results (to the third decimal place.)
 
-We'll cover an extra little detail. The t-test is often said to assume homogeneity of variance - this assumption only really matters if your sample sizes are different in the two groups, however the t-test, by default, corrects for homogeneity of variance - although you can turn this off. 
+We'll cover an extra little detail. The t-test is often said to assume
+homogeneity of variance - this assumption only really matters if your sample
+sizes are different in the two groups, however the t-test, by default, corrects
+for homogeneity of variance - although you can turn this off. 
 
 We'll generate some data which violates homogeneity of variance.
 
@@ -140,7 +148,11 @@ summary(sem_mg_fit_no_hov, ci = TRUE)
 
 We get the same results (and the same difference in statistical significance).
 
-However, we can relax the homogeneity of variance assumption by using a robust estimator (e.g. Satorra-Bentler Chi-Square and related; also called a sandwich estimator). In SEM, we think about robust estimates as being about distributional assumptions, but they also relax the homogeneity of variance assumptions. 
+However, we can relax the homogeneity of variance assumption by using a robust
+estimator (e.g. Satorra-Bentler Chi-Square and related; also called a sandwich
+estimator). In SEM, we think about robust estimates as being about
+distributional assumptions, but they also relax the homogeneity of variance
+assumption. 
 
 ```{r t7}
 
@@ -158,9 +170,14 @@ summary(sem_reg_no_hov)
 ```
 Same result! Whoo hoo!
 
-Finally, we don't need the raw data to calculate an SEM. We can do it with the summary data. For a multiple group model, all we need is the mean of the two groups, the (co)variance(s) of the two groups, and the number in each group. 
+Finally, we don't need the raw data to calculate an SEM. We can do it with the
+summary data. For a multiple group model, all we need is the mean of the two
+groups, the (co)variance(s) of the two groups, and the number in each group. 
 
-Each of these needs to be in a list, with two items. The variances need to be in a matrix. We show how to create the summary data below. (If you have the data, you wouldn't do this, but if you only have the summary data we'll see later that you can just type the values in.)
+Each of these needs to be in a list, with two items. The variances need to be in
+a matrix. We show how to create the summary data below. (If you have the data,
+you wouldn't do this, but if you only have the summary data we'll see later that
+you can just type the values in.)
 
 ```{r t8}
 
@@ -171,7 +188,8 @@ df_summary <- d2 %>%
                    var = var(y)) 
 list_means <- list(df_summary$m[[1]], df_summary$m[[2]])
 list_ns <- list(df_summary$n[[1]], df_summary$n[[2]])
-list_vars <- list(matrix(df_summary$var[[1]]), matrix(df_summary$var[[2]]))
+list_vars <- list(matrix(df_summary$var[[1]]),
+                  matrix(df_summary$var[[2]]))
 # name rows and columns for each variable
 list_vars <- lapply(list_vars, function(mat) {
   rownames(mat) <- colnames(mat) <- "y"
@@ -183,7 +201,8 @@ list_ns
 list_vars
 ```
 
-Now we can fit the same models as before, but using summary data. All we change is the data, we don't change the models. 
+Now we can fit the same models as before, but using summary data. All we change
+is the data, we don't change the models. 
 
 ```{r t9}
 sem_mg_fit_hov_summary <- 
@@ -191,7 +210,8 @@ sem_mg_fit_hov_summary <-
               sample.mean = list_means,
               sample.cov = list_vars,
               sample.nobs = list_ns)
-sem_mg_fit_no_hov_summary <- lavaan::sem(sem_mg_model_no_hov,
+sem_mg_fit_no_hov_summary <-
+  lavaan::sem(sem_mg_model_no_hov,
               sample.mean = list_means,
               sample.cov = list_vars,
               sample.nobs = list_ns)
@@ -204,9 +224,11 @@ summary(sem_mg_fit_no_hov_summary)
 
 OK, now we've established that we can do t-tests with SEM. Why do we care?
 
-We care because calculating power for SEMs can be a lot easier (and quicker) than calculating power using other methods. 
+We care because calculating power for SEMs can be a lot easier (and quicker)
+than calculating power using other methods. 
 
-First we'll calculate power for a t-test using the power.t.test() function, for d = 0.2, n = 100 (per group).
+First we'll calculate power for a t-test using the power.t.test() function, for
+d = 0.2, n = 100 (per group).
 
 ```{r t10}
 
@@ -215,7 +237,9 @@ power.t.test(d = 0.2, n = 100)
 ```
 
 The Satorra-Saris method makes it easy to get power from SEM. 
-First, set up your data that contains effects of the magnitud you want to test. We'll use the multiple groups approach, and instead of calculating the means, variances, etc from the data, we'll just type them in.
+First, set up your data that contains effects of the magnitud you want to test.
+We'll use the multiple groups approach, and instead of calculating the means,
+variances, etc from the data, we'll just type them in.
 
 Means are 0 and 0.2, variances are 1.00, and ns are 100
 
@@ -232,9 +256,13 @@ ns <- list(100, 100)
 
 
 
-Now we have the population data, we can fit the null model to it. We free all of the parameters, except the single one that we are interested in. Then we fit that model. 
+Now we have the population data, we can fit the null model to it. We free all of
+the parameters, except the single one that we are interested in. Then we fit
+that model. 
 
-We then get a chi-square for the fit. The probability tells us the probability of obtaining the effect size (or larger) given that the null hypothesis is false. We know the null hypothesis is not false, because we generated the data. 
+We then get a chi-square for the fit. The probability tells us the probability
+of obtaining the effect size (or larger) given that the null hypothesis is
+false. We know the null hypothesis is not false, because we generated the data. 
 
 
 
@@ -251,12 +279,21 @@ summary(fit_mg_1_null)
 ```
 
 
-However, this is our _population_chi-square, which we're sampling from. For statistical significance testing, we ask what the probability of obtaining a result of whatever magnitude we found is, given that the null hypothesis is false.  
-We don't want to know that. We want to know the probability of obtaining a result of statistically significant magnitude, given that the null hypothesis is false, and the population data look like the population as we defined it. 
+However, this is our _population_chi-square, which we're sampling from. For
+statistical significance testing, we ask what the probability of obtaining a
+result of whatever magnitude we found is, given that the null hypothesis is
+false.  
 
-This population value of chi-square is called the non-centrality parameter (ncp). 
+We don't want to know that. We want to know the probability of obtaining a
+result of statistically significant magnitude, given that the null hypothesis is
+false, and the population data look like the population as we defined it. 
 
-We want to know the probability of getting a significant result, given our ncp. So we need to know what the critical value of chi-square is. To find this we use the qchisq() function. 
+This population value of chi-square is called the non-centrality parameter
+(ncp). 
+
+We want to know the probability of getting a significant result, given our ncp.
+So we need to know what the critical value of chi-square is. To find this we use
+the qchisq() function. 
 
 Then we use the pchisq() function to find the power. 
 
@@ -275,15 +312,27 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 Look at that. Same value of power. 
 
 
-This was kind of complex, but the basic idea can be extended to any model that you can represent in an SEM, and that includes anova, manova, repeated measures manova, mancova, 2 way repeated measures anova, etc.  We can also, as we'll see, relax some assumptions. 
+This was kind of complex, but the basic idea can be extended to any model that
+you can represent in an SEM, and that includes anova, manova, repeated measures
+manova, mancova, 2 way repeated measures anova, etc.  We can also, as we'll see,
+relax some assumptions. 
 
-A nice thing about this approach is that the non-centrality parameter is a multiple of the sample size. If you double the sample size, you double the non-centrality parameter. 
+A nice thing about this approach is that the non-centrality parameter is a
+multiple of the sample size. If you double the sample size, you double the
+non-centrality parameter. 
 
-This is useful, because this approach tells us the power for a certain sample size. Usually, I want to know the sample size that's required for a certain power.
+This is useful, because this approach tells us the power for a certain sample
+size. Usually, I want to know the sample size that's required for a certain
+power.
 
-But how do I know how large I need my non-centrality parameter (ncp) to be? Well, a useful rule of thumb is that power of 0.8 is obtained when the non-centrality parameter is approximately equal to the chi-square that gives a p-value of around 0.005.
+But how do I know how large I need my non-centrality parameter (ncp) to be?
+Well, a useful rule of thumb is that power of 0.8 is obtained when the 
+non-centrality parameter is approximately equal to the chi-square that gives a 
+p-value of around 0.005.
 
-So, first we find out what the ncp needs to be, then we find find how many times larger (or smaller) this value is than our NCP, then we increase our sample size by this value.
+So, first we find out what the ncp needs to be, then we find find how many times
+larger (or smaller) this value is than our NCP, then we increase our sample size
+by this value.
 
 ```{r t14}
 # Find the desired ncp
@@ -322,14 +371,19 @@ Finally, we'll see if that's correct.
 power.t.test(power = 0.8, d = 0.2)
 
 ```
-It appears that we are out by 1. Which is certainly close enough for power analysis.
+It appears that we are out by 1. Which is certainly close enough for power
+analysis.
 
 ### That was a lot of effort
 
-It was. But we can do lots of clever things now. What happens if we think we might have different variances or different sample sizes in each group? We can't use the base power functions (for different sample sizes, the pwr package has some useful functions.) We can run simulations, but these get to be hard work when we want to run lots of different tests to explore our options.
+It was. But we can do lots of clever things now. What happens if we think we
+might have different variances or different sample sizes in each group? We can't
+use the base power functions (for different sample sizes, the pwr package has
+some useful functions.) We can run simulations, but these get to be hard work
+when we want to run lots of different tests to explore our options.
 
-For example, if we think the the variances will be (1, 4), the sample sizes (100, 400) and the difference 0.2, we could run a simulation.
-
+For example, if we think the the variances will be (1, 4), the sample sizes
+(100, 400) and the difference 0.2, we could run a simulation.
 
 ```{r t16}
 
@@ -419,6 +473,10 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 
 ```
 
-If you've got a simple power problem, it's quickest to use the base R functions. If you've got a slightly more complex problem, it's quickest to run a simulation.
+If you've got a simple power problem, it's quickest to use the base R functions.
+If you've got a slightly more complex problem, it's quickest to run a simulation.
 
-If you want to test 20 different sample sizes, with 20 different ratios of variances, that's going to take almost 5 hours of computer time to run the simulations - it's going to be quicker to wrap the above code into a loop, and run that. 
+If you want to test 20 different sample sizes, with 20 different ratios of
+variances, that's going to take almost 5 hours of computer time to run the
+simulations - it's going to be quicker to wrap the above code into a loop, and
+run that. 
