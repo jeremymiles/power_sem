@@ -6,13 +6,17 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
+library(ggplot2)
 library(lavaan) 
 ```
 
 # Power Analysis in SEM
 
 Author: jeremy.miles@gmail.com
-Date: 2020-12-05
+
+Date: 2020-12-06
+
+Status: Draft
 
 This analysis updates the paper [A framework for power analysis using a 
 structural equation modelling procedure](https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-3-27)
@@ -59,7 +63,7 @@ population mean of 0.2. Both groups will have sd = 1.
 
 set.seed(1234)
 d1 <- data.frame(x = c(rep(0, 100), rep(1, 100)),
-                y = rnorm(200)) %>%
+                 y = rnorm(200)) %>%
   dplyr::mutate(y = y + 0.2 * x)
 
 ```
@@ -385,7 +389,7 @@ when we want to run lots of different tests to explore our options.
 For example, if we think the the variances will be (1, 4), the sample sizes
 (100, 400) and the difference 0.2, we could run a simulation.
 
-```{r t16}
+```{r t16, cache=TRUE}
 
 n0 = 100
 n1 = 400
@@ -398,7 +402,7 @@ system.time({
   res <- lapply(seq(1e4), function(i) {
     d2 <- data.frame(x = c(rep(0, n0), rep(1, n1)),
                      y = rnorm(n0 + n1) * v0) %>%
-       dplyr::mutate(
+      dplyr::mutate(
         y = ifelse(x == 1, (v1 * y) + 0.2, y))
     sig <- t.test(y ~ x, data = d2)$p.value < 0.05
     return(sig)
@@ -469,8 +473,6 @@ crit_chi <- qchisq(p = 0.95, df = 1)
 ## Power
 1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
 
-
-
 ```
 
 If you've got a simple power problem, it's quickest to use the base R functions.
@@ -480,3 +482,112 @@ If you want to test 20 different sample sizes, with 20 different ratios of
 variances, that's going to take almost 5 hours of computer time to run the
 simulations - it's going to be quicker to wrap the above code into a loop, and
 run that. 
+
+## Repeated Measures t-test.
+
+For the repeated measures t-test, the procedure is similar to the independent
+groups t-test, but instead we have one group, and we also need to specify the
+covariance between the two measures. If your variables are standardized (and
+they usually are for power analysis) then the covariance is the correlation, and
+things are much easier.
+()
+
+We set up a covariance matrix, and a vector of means.  
+
+
+```{r t19 }
+diff <- 0.2
+corr <- 0.4
+cmat <- matrix(c(1, corr,
+                 corr, 1), nrow = 2)
+n <- 200
+colnames(cmat) <- rownames(cmat) <- c("y0", "y1")
+means <- c(0, diff)
+
+rm_t_model <- "
+y0 ~~ y0
+y1 ~~ y1
+y0 ~~ y1
+y0 ~ m0 * 1
+y1 ~ m1 * 1
+
+d := m0 - m1
+d == 0
+  "
+rm_t_fit <- lavaan::sem(
+  rm_t_model, sample.mean = means,
+  sample.cov = cmat,
+  sample.nobs = n)
+
+ncp <- fitMeasures(rm_t_fit)[["chisq"]]
+
+crit_chi <- qchisq(p = 0.95, df = 1)
+## Power
+1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
+
+```
+We can see that having a positive correlation has a dramatic effect on power. 
+
+To explore the effect of the differing correlation on power, we can wrap that
+code into a function, and then call it for correlations from -0.5 to 0.9.
+
+```{r t20}
+RMPower <- function(n = 100, corr = 0.4, diff = 0.2) {
+  
+  cmat <- matrix(c(1, corr,
+                   corr, 1), nrow = 2)
+  colnames(cmat) <- rownames(cmat) <- c("y0", "y1")
+  means <- c(0, diff)
+  
+  rm_t_model <- "
+  y0 ~~ y0
+  y1 ~~ y1
+  y0 ~~ y1
+  y0 ~ m0 * 1
+  y1 ~ m1 * 1
+  
+  d := m0 - m1
+  d == 0
+  "
+  rm_t_fit <- lavaan::sem(
+    rm_t_model, sample.mean = means,
+    sample.cov = cmat,
+    sample.nobs = n)
+  
+  ncp <- fitMeasures(rm_t_fit)[["chisq"]]
+  
+  crit_chi <- qchisq(p = 0.95, df = 1)
+  ## Power
+  power <- 1 - pchisq(q = crit_chi, df = 1, ncp = ncp) 
+  desired_ncp <- qchisq(p = 0.995, df = 1)
+  ## sample size multiplier
+  n_multiplier <- desired_ncp / ncp
+  return(c(power = power, n80 = n_multiplier * n))
+}
+
+df_power <- lapply(seq(-.5, 0.9, 0.01), function(corr) {
+  power <- RMPower(corr = corr)
+  return(c(power, corr = corr))
+}) %>% dplyr::bind_rows()
+
+ggplot2::ggplot(df_power, aes(x = corr, y = power)) +
+  geom_line() + 
+  ggtitle(paste0("Power for for different correlations given n = ", n))
+
+ggplot2::ggplot(df_power, aes(x = corr, y = n80)) +
+  geom_line() + 
+  ggtitle("N for 80% Power")
+```
+
+With the independent groups t-test, the power for a sample size of 200 was 0.29.
+The repeated measures t-test, with a correlation of zero, gives (approximately)
+the same power for a sample size of 100 (which is equivalent to 200
+observations, so the same amount of information). As the correlation increaes,
+the power increases. In the rare event that your measures are negatively 
+correlated, power is lower than the independent samples t-test. 
+
+The second chart shows how the required sample size for 80% power changes as a 
+function of the correlation between the measures. The relationship is linear. If
+the correlation is 0.00, n of around 400 is required for 80% power. If the 
+correlation is 0.5, n = 200 is required (and if the correlation is 1.00, the
+power is infinite because the standard error of the differences is zero.)
